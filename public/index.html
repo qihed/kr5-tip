@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Книга контактов</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1>📖 Книга контактов</h1>
+        
+        <div id="message" class="message"></div>
+        
+        <div class="search-box">
+            <input type="text" id="searchInput" placeholder="Поиск контактов по имени, телефону или email...">
+        </div>
+        
+        <div class="form-section">
+            <h2>Добавить новый контакт</h2>
+            <form id="contactForm">
+                <div class="form-group">
+                    <label for="name">Имя *</label>
+                    <input type="text" id="name" required>
+                </div>
+                <div class="form-group">
+                    <label for="phone">Телефон *</label>
+                    <input type="text" id="phone" required>
+                </div>
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email">
+                </div>
+                <div class="form-group">
+                    <label for="address">Адрес</label>
+                    <input type="text" id="address">
+                </div>
+                <button type="submit" class="btn btn-primary">Добавить контакт</button>
+            </form>
+        </div>
+        
+        <div id="contactsContainer">
+            <div class="contacts-grid" id="contactsGrid"></div>
+        </div>
+    </div>
+    
+    <script>
+        const API_URL = '/api/contacts';
+        let contacts = [];
+        let editingId = null;
+        
+        // Загрузка контактов при загрузке страницы
+        document.addEventListener('DOMContentLoaded', () => {
+            loadContacts();
+            
+            // Обработка формы
+            document.getElementById('contactForm').addEventListener('submit', handleSubmit);
+            
+            // Обработка поиска
+            document.getElementById('searchInput').addEventListener('input', handleSearch);
+        });
+        
+        // Загрузка всех контактов
+        async function loadContacts(searchTerm = '') {
+            try {
+                const url = searchTerm ? `${API_URL}?search=${encodeURIComponent(searchTerm)}` : API_URL;
+                const response = await fetch(url);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ошибка! статус: ${response.status}`);
+                }
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    contacts = result.data;
+                    renderContacts();
+                } else {
+                    showMessage(result.message || 'Ошибка при загрузке контактов', 'error');
+                }
+            } catch (error) {
+                console.error('Ошибка при загрузке контактов:', error);
+                showMessage('Ошибка при загрузке контактов. Убедитесь, что Express сервер запущен на порту 3000', 'error');
+            }
+        }
+        
+        // Поиск контактов
+        function handleSearch(e) {
+            const searchTerm = e.target.value;
+            loadContacts(searchTerm);
+        }
+        
+        // Обработка отправки формы
+        async function handleSubmit(e) {
+            e.preventDefault();
+            
+            const formData = {
+                name: document.getElementById('name').value,
+                phone: document.getElementById('phone').value,
+                email: document.getElementById('email').value,
+                address: document.getElementById('address').value
+            };
+            
+            try {
+                let response;
+                if (editingId) {
+                    // Обновление контакта
+                    response = await fetch(`${API_URL}/${editingId}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(formData)
+                    });
+                } else {
+                    // Создание контакта
+                    response = await fetch(API_URL, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(formData)
+                    });
+                }
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ошибка! статус: ${response.status}. ${errorText}`);
+                }
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showMessage(editingId ? 'Контакт обновлен' : 'Контакт добавлен', 'success');
+                    document.getElementById('contactForm').reset();
+                    editingId = null;
+                    loadContacts();
+                } else {
+                    showMessage(result.message || 'Ошибка', 'error');
+                }
+            } catch (error) {
+                console.error('Ошибка при сохранении контакта:', error);
+                if (error.message.includes('Failed to fetch') || error.message.includes('404') || error.message.includes('405')) {
+                    showMessage('Ошибка подключения к серверу. Убедитесь, что Express сервер запущен (npm start) и страница открыта на http://localhost:3000', 'error');
+                } else {
+                    showMessage('Ошибка при сохранении контакта: ' + error.message, 'error');
+                }
+            }
+        }
+        
+        // Удаление контакта
+        async function deleteContact(id) {
+            if (!confirm('Вы уверены, что хотите удалить этот контакт?')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_URL}/${id}`, {
+                    method: 'DELETE'
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ошибка! статус: ${response.status}`);
+                }
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showMessage('Контакт удален', 'success');
+                    loadContacts();
+                } else {
+                    showMessage(result.message || 'Ошибка', 'error');
+                }
+            } catch (error) {
+                console.error('Ошибка при удалении контакта:', error);
+                showMessage('Ошибка при удалении контакта', 'error');
+            }
+        }
+        
+        // Редактирование контакта
+        function editContact(id) {
+            const contact = contacts.find(c => c.id === id);
+            if (!contact) return;
+            
+            document.getElementById('name').value = contact.name;
+            document.getElementById('phone').value = contact.phone;
+            document.getElementById('email').value = contact.email;
+            document.getElementById('address').value = contact.address;
+            
+            editingId = id;
+            
+            // Прокрутка к форме
+            document.querySelector('.form-section').scrollIntoView({ behavior: 'smooth' });
+        }
+        
+        // Отображение контактов
+        function renderContacts() {
+            const grid = document.getElementById('contactsGrid');
+            
+            if (contacts.length === 0) {
+                grid.innerHTML = '<p style="grid-column: 1/-1; text-align: center; color: #666;">Контакты не найдены</p>';
+                return;
+            }
+            
+            grid.innerHTML = contacts.map(contact => `
+                <div class="contact-card">
+                    <h3>${contact.name}</h3>
+                    <p><strong>Телефон:</strong> ${contact.phone}</p>
+                    <p><strong>Email:</strong> ${contact.email || 'Не указан'}</p>
+                    <p><strong>Адрес:</strong> ${contact.address || 'Не указан'}</p>
+                    <div class="contact-actions">
+                        <button class="btn btn-success" onclick="editContact(${contact.id})">Редактировать</button>
+                        <button class="btn btn-danger" onclick="deleteContact(${contact.id})">Удалить</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        // Показать сообщение
+        function showMessage(text, type) {
+            const messageEl = document.getElementById('message');
+            messageEl.textContent = text;
+            messageEl.className = `message ${type}`;
+            messageEl.style.display = 'block';
+            
+            setTimeout(() => {
+                messageEl.style.display = 'none';
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
+

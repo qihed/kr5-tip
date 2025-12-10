@@ -1,0 +1,17 @@
+{
+  "name": "kr5-tip-contacts-book",
+  "version": "1.0.0",
+  "description": "Express.js приложение - Книга контактов",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": ["express", "contacts", "api"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
+
